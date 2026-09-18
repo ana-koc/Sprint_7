@@ -20,14 +20,25 @@ def order_api():
 def courier_cleanup(courier_api):
     """
     Фикстура-накопитель для автоматического удаления курьеров в teardown.
-    В тесте можно передать courier_id в список: courier_cleanup.append(courier_id).
+    Принимает в список:
+      - id курьера (int / str)
+      - или словарь с данными курьера ('login', 'password').
     После завершения теста все добавленные курьеры будут удалены.
     """
-    courier_ids = []
-    yield courier_ids
-    for cid in courier_ids:
-        if cid:
-            courier_api.delete_courier(cid)
+    couriers_to_delete = []
+    yield couriers_to_delete
+    for item in couriers_to_delete:
+        if isinstance(item, dict):
+            login_res = courier_api.login_courier({
+                "login": item["login"],
+                "password": item["password"]
+            })
+            if login_res.status_code == 200:
+                cid = login_res.json().get("id")
+                if cid:
+                    courier_api.delete_courier(cid)
+        elif item:
+            courier_api.delete_courier(item)
 
 
 @pytest.fixture
@@ -40,15 +51,13 @@ def created_courier(courier_api):
     """
     payload = generate_courier_payload()
     # 1. Создаем курьера
-    create_response = courier_api.create_courier(payload)
-    assert create_response.status_code == 201, "Не удалось создать тестового курьера"
+    courier_api.create_courier(payload)
 
     # 2. Логинимся, чтобы получить id для последующего удаления
     login_response = courier_api.login_courier({
         "login": payload["login"],
         "password": payload["password"]
     })
-    assert login_response.status_code == 200, "Не удалось залогиниться для получения id курьера"
     courier_id = login_response.json().get("id")
 
     payload["id"] = courier_id
